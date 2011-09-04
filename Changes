@@ -1,5 +1,33 @@
 Revision history for Perl extension Text::Wrap::Smart::XS.
 
+0.05_01  2011-09-04  <schubiger@cpan.org>
+
+ - Refactor exact_wrap() and fuzzy_wrap().
+
+ - When wrapping text, preprocess it first by substituting
+   newlines with spaces.
+
+ - Validation of arguments is handled by Params::Validate.
+
+ - Use the boolean pragma for true/false values.
+
+ - Test with "Lorem Ipsum" as input text.
+
+ - Test handling of texts with LF, CR and CRLF as line endings.
+
+ - Skip documentation tests for non-release testing.
+
+ - Do no longer recommend Test::Pod and Test::Pod::Coverage.
+
+ - Remove the testing diagnostic.
+
+ - Mention that the wrapping length is used to calculate the
+   average one.
+
+ - Reword the abstract.
+
+ - Update broken license link.
+
 0.05 Thu May 22 10:13:30 CEST 2008
 
  - Use less intendation in XS.xs.

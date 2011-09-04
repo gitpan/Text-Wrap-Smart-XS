@@ -6,51 +6,58 @@ use warnings;
 use Test::More tests => 4;
 use Text::Wrap::Smart::XS qw(exact_wrap);
 
+my $join = sub { local $_ = shift; chomp; s/\n/ /g; $_ };
+
+my $text = $join->(<<'EOT');
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Curabitur vel diam nec nisi pellentesque gravida a sit amet
+metus. Fusce non volutpat arcu. Lorem ipsum dolor sit amet,
+consectetur adipiscing elit. Donec euismod, dolor eget placerat
+euismod, massa risus ultricies metus, id commodo cras amet.
+EOT
+
 my @expected = (
-    [
-      'abcdefghijklmnopqrstuvwxyz ' x 5,
-      'abcdefghijklmnopqrstuvwxyz ' x 5, ],
-    [ 'abcdefghijklmnopqrstuvwxyz abc',
-      'defghijklmnopqrstuvwxyz abcdef',
-      'ghijklmnopqrstuvwxyz abcdefghi',
-      'jklmnopqrstuvwxyz abcdefghijkl',
-      'mnopqrstuvwxyz abcdefghijklmno',
-      'pqrstuvwxyz abcdefghijklmnopqr',
-      'stuvwxyz abcdefghijklmnopqrstu',
-      'vwxyz abcdefghijklmnopqrstuvwx',
-      'yz abcdefghijklmnopqrstuvwxyz ',  ],
+    [ $join->(<<'EOT'),
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Curabitur vel diam nec nisi pellentesque gravida a sit amet
+metus. Fusce non volutpat arcu. L
+EOT
+    , $join->(<<'EOT'),
+orem ipsum dolor sit amet, consectetur adipiscing elit. Donec
+euismod, dolor eget placerat euismod, massa risus ultricies
+metus, id commodo cras amet.
+EOT
+    ],
+    [ 'Lorem ipsum dolor sit amet, co',
+      'nsectetur adipiscing elit. Cur',
+      'abitur vel diam nec nisi pelle',
+      'ntesque gravida a sit amet met',
+      'us. Fusce non volutpat arcu. L',
+      'orem ipsum dolor sit amet, con',
+      'sectetur adipiscing elit. Done',
+      'c euismod, dolor eget placerat',
+      ' euismod, massa risus ultricie',
+      's metus, id commodo cras amet.', ],
 );
 
-# Contains four fields: text to be wrapped, expected result,
-# amount of substrings expected and the wrapping length of a chunk.
-my @args = (
-    [ 'abcdefghijklmnopqrstuvwxyz ' x 10, $expected[0], 2,  0 ],
-    [ 'abcdefghijklmnopqrstuvwxyz ' x 10, $expected[1], 9, 30 ],
+my @entries = (
+    [ $text, $expected[0],  2,  0 ],
+    [ $text, $expected[1], 10, 30 ],
 );
 
-foreach my $args (@args) {
-    test_wrap($args);
+foreach my $entry (@entries) {
+    test_wrap(@$entry);
 }
 
 sub test_wrap
 {
-    my ($args) = @_;
-
-    my $text     = $args->[0];
-    my $expected = $args->[1];
-    my $count    = $args->[2];
-    my $wrap_at  = $args->[3];
+    my ($text, $expected, $count, $wrap_at) = @_;
 
     my @strings = exact_wrap($text, $wrap_at);
 
-    my $wrapping_length = $wrap_at ? $wrap_at : 'default';
-    my $wrapping_length_text = "(wrapping length: $wrapping_length)";
+    my $length = $wrap_at ? $wrap_at : 'default';
+    my $message = "(wrapping length: $length)";
 
-    my @msg = (
-        "$wrapping_length_text correct amount of substrings",
-        "$wrapping_length_text splitted at word boundary",
-    );
-
-    is(scalar @strings, $count, $msg[0]);
-    is_deeply(\@strings, \@$expected, $msg[1]);
+    is(@strings, $count, "$message amount of substrings");
+    is_deeply(\@strings, $expected, "$message splitted at offset");
 }

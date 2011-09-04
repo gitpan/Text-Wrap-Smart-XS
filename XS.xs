@@ -4,129 +4,173 @@
 
 #include "ppport.h"
 
+#define PRE_PROCESS(text, string, t) \
+    subst_newlines (text, &string);  \
+    if (string)                      \
+      t = string;                    \
+    else                             \
+      t = (char *)text;              \
+
+void
+subst_newlines (const char *text, char **string)
+{
+  if (strpbrk (text, "\n\r"))
+    {
+      const char *src = text;
+      char *dest;
+      char *buf, *nl;
+      const char *eot = text + strlen (text);
+      buf = dest = malloc (strlen (text) + 1);
+      while ((nl = strpbrk (src, "\n\r")))
+        {
+          char *p = nl;
+          strncpy (dest, src, nl - src);
+          dest += nl - src;
+          src  += nl - src;
+          switch (*nl)
+            {
+              case '\n': p++; break; /* LF */
+              case '\r': p++; break; /* CR */
+              default:        break; /* never reached */
+            }
+          if (*nl == '\r' && *p == '\n') /* CRLF */
+            p++;
+          src += p - nl;
+          if (p < eot)
+            *dest++ = ' ';
+          else
+            goto end_of_text;
+        }
+      if (src < eot)
+        {
+          strncpy (dest, src, eot - src);
+          dest += eot - src;
+          src  += eot - src;
+        }
+      end_of_text:
+      *dest = '\0';
+      *string = buf;
+    }
+}
+
 MODULE = Text::Wrap::Smart::XS                PACKAGE = Text::Wrap::Smart::XS
 
 void
 xs_exact_wrap (text, wrap_at)
-      char *text;
+      const char *text;
       unsigned int wrap_at;
     PROTOTYPE: $$
     INIT:
-      char *str;
-      char *str_iter;
-      char *text_iter;
       unsigned int i;
-      unsigned long c;
-      unsigned long average;
-      unsigned long length;
-      unsigned long offset;
-      long length_iter;
+      unsigned long average, length, offset;
+      char *string = NULL;
+      char *eot, *t;
     PPCODE:
-      length = strlen (text);
-      text_iter = text;
+      PRE_PROCESS (text, string, t);
+      length = strlen (t);
+      eot = t + length;
 
-      length_iter = length;
-      i = 0;
-      do
+      i = length / wrap_at;
+      if (length % wrap_at != 0)
+        i++;
+      average = ceil ((float)length / (float)i);
+
+      for (offset = 0; offset < length && *t; offset += average)
         {
-          length_iter -= wrap_at;
-          i++;
-        }
-      while (length_iter > 0);
-      average = ceil ((float) length / (float) i);
+          char *str;
+          unsigned long size = average > (eot - t) ? (eot - t) : average;
 
-      for (offset = 0; offset < length; offset += average)
-        {
-          Newx (str, average + 1, char);
+          Newx (str, size + 1, char);
 
-          c = average;
-          str_iter = str;
-          while (c-- > 0 && *text_iter)
-            *str_iter++ = *text_iter++;
-          *str_iter = '\0';
+          strncpy (str, t, size);
+          *(str + size) = '\0';
+
+          t += size;
 
           EXTEND (SP, 1);
           PUSHs (sv_2mortal(newSVpv(str, 0)));
 
           Safefree (str);
         }
+
+      Safefree (string);
 
 void
 xs_fuzzy_wrap (text, wrap_at)
-      char *text;
+      const char *text;
       unsigned int wrap_at;
     PROTOTYPE: $$
     INIT:
-      char *p;
-      char *str;
-      char *str_iter;
-      char *text_iter;
       unsigned int i;
-      unsigned long average;
-      unsigned long count;
-      unsigned long diff;
-      unsigned long length;
-      long average_iter;
-      long length_iter;
+      unsigned long average, length;
+      char *string = NULL;
+      char *t;
     PPCODE:
-      length = strlen (text);
-      text_iter = text;
+      PRE_PROCESS (text, string, t);
+      length = strlen (t);
 
-      length_iter = length;
-      i = 0;
-      do
+      i = length / wrap_at;
+      if (length % wrap_at != 0)
+        i++;
+      average = ceil ((float)length / (float)i);
+
+      while (*t)
         {
-          length_iter -= wrap_at;
-          i++;
-        }
-      while (length_iter > 0);
-      average = ceil ((float) length / (float) i);
+          unsigned int spaces = 0;
+          long remaining = average;
+          unsigned long size;
+          char *str, *s;
 
-      while (*text_iter)
-        {
-          unsigned int seen_spaces = 0;
-
-          average_iter = average;
-          count = 0;
-          str_iter = text_iter;
-
-          while (*str_iter)
+          /* calculate pos and size of each chunk */
+          for (s = t; *s;)
             {
-              if (*str_iter == ' ')
-                seen_spaces++;
-              p = strchr (str_iter, ' ');
-              if (p == NULL)
-                diff = 0;
+              char *ptr = strchr (s, ' ');
+              if (ptr)
+                {
+                  unsigned long next_space;
+                  char *n, *p;
+                  /* advance pos to space */
+                  remaining -= ptr - s;
+                  p = s = ptr;
+                  /* skip spaces */
+                  while (*p == ' ')
+                    p++;
+                  /* advance pos after space */
+                  remaining -= p - s;
+                  /* get distance to next space */
+                  n = strchr (p, ' ');
+                  next_space = n ? n - p : 0;
+                  /* pos and size complete */
+                  if (next_space > remaining && spaces >= 1)
+                    break;
+                  else if (remaining <= 0)
+                    break;
+                  spaces++;
+                  s = p;
+                }
               else
-                diff = p - str_iter;
-              if (diff > average_iter && seen_spaces > 1)
-                break;
-              if (average_iter <= 0 && *str_iter == ' ')
-                break;
-              average_iter--;
-              count++;
-              str_iter++;
+                s += strlen (s);
             }
-          if (count == 0)
+          size = s - t;
+          if (!size)
             break;
 
-          Newx (str, count + 1, char);
+          Newx (str, size + 1, char);
 
-          i = count;
-          str_iter = str;
-          while (i--)
-            {
-              if (i == 0 && *text_iter == ' ')
-                break;
-              *str_iter++ = *text_iter++;
-            }
-          *str_iter = '\0';
+          strncpy (str, t, size);
+          *(str + size) = '\0';
+
+          t += size;
 
           EXTEND (SP, 1);
           PUSHs (sv_2mortal(newSVpv(str, 0)));
 
           Safefree (str);
 
-          if (*text_iter != '\0')
-            text_iter++;
+          if (*t)
+            t++;
+          while (*t == ' ')
+            t++;
         }
+
+      Safefree (string);
